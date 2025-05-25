@@ -17,6 +17,8 @@ import { db } from '../firebase/config';
 interface PointageRecord {
   id?: string;
   ip: string;
+  codePersonnel?: string; // Ajout du code personnel (optionnel pour compatibilité)
+  nomAgent?: string;      // Ajout du nom de l'agent (optionnel pour compatibilité)
   latitude: number | null;
   longitude: number | null;
   address: string;
@@ -30,6 +32,8 @@ interface AgentMapping {
   id?: string;
   ip: string;
   nom: string;
+  codePersonnel: string; // Ajout du code personnel
+  dateCreation: string;
 }
 
 const Admin = () => {
@@ -39,6 +43,8 @@ const Admin = () => {
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [newAgentIp, setNewAgentIp] = useState('');
   const [newAgentName, setNewAgentName] = useState('');
+  const [newAgentCode, setNewAgentCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<AgentMapping | null>(null);
   const { logout, isAuthenticated, currentUser } = useAuth();
   const navigate = useNavigate();
@@ -113,27 +119,74 @@ const Admin = () => {
     }
   };
   
-  const getAgentName = (ip: string) => {
-    const agent = agents.find(a => a.ip === ip);
-    return agent ? agent.nom : ip;
+  const getAgentName = (ip: string, codePersonnel?: string) => {
+    // Priorité au code personnel s'il existe
+    if (codePersonnel) {
+      const agentByCode = agents.find(a => a.codePersonnel === codePersonnel);
+      if (agentByCode) return agentByCode.nom;
+    }
+    
+    // Sinon, recherche par IP (pour compatibilité avec les anciens pointages)
+    const agentByIp = agents.find(a => a.ip === ip);
+    return agentByIp ? agentByIp.nom : ip;
+  };
+
+  // Génération d'un code personnel unique à 4 chiffres
+  const generateUniqueCode = async () => {
+    // Récupérer tous les codes existants
+    const existingCodes = agents.map(agent => agent.codePersonnel);
+    
+    // Générer un nouveau code jusqu'à ce qu'il soit unique
+    let newCode;
+    do {
+      // Générer un nombre aléatoire à 4 chiffres
+      newCode = Math.floor(1000 + Math.random() * 9000).toString();
+    } while (existingCodes.includes(newCode));
+    
+    return newCode;
+  };
+
+  // Vérification de l'unicité du code personnel
+  const isCodeUnique = (code: string, excludeAgentId?: string) => {
+    return !agents.some(agent => 
+      agent.codePersonnel === code && agent.id !== excludeAgentId
+    );
   };
   
   const handleAddAgent = async () => {
     if (!newAgentIp || !newAgentName) return;
     
+    // Validation du code personnel
+    if (!newAgentCode) {
+      setCodeError('Le code personnel est requis.');
+      return;
+    }
+    
+    if (!/^\d{4}$/.test(newAgentCode)) {
+      setCodeError('Le code personnel doit contenir exactement 4 chiffres.');
+      return;
+    }
+    
     try {
+      // Vérifier l'unicité du code (sauf pour l'agent en cours d'édition)
+      if (!isCodeUnique(newAgentCode, editingAgent?.id)) {
+        setCodeError('Ce code personnel est déjà utilisé par un autre agent.');
+        return;
+      }
+      
       if (editingAgent && editingAgent.id) {
         // Mettre à jour l'agent existant
         const agentRef = doc(db, 'agents', editingAgent.id);
         await updateDoc(agentRef, {
           ip: newAgentIp,
-          nom: newAgentName
+          nom: newAgentName,
+          codePersonnel: newAgentCode
         });
         
         // Mettre à jour l'état local
         setAgents(agents.map(agent => 
           agent.id === editingAgent.id 
-            ? { ...agent, ip: newAgentIp, nom: newAgentName } 
+            ? { ...agent, ip: newAgentIp, nom: newAgentName, codePersonnel: newAgentCode } 
             : agent
         ));
       } else {
@@ -147,13 +200,14 @@ const Admin = () => {
           const agentDoc = querySnapshot.docs[0];
           const agentRef = doc(db, 'agents', agentDoc.id);
           await updateDoc(agentRef, {
-            nom: newAgentName
+            nom: newAgentName,
+            codePersonnel: newAgentCode
           });
           
           // Mettre à jour l'état local
           setAgents(agents.map(agent => 
             agent.id === agentDoc.id 
-              ? { ...agent, nom: newAgentName } 
+              ? { ...agent, nom: newAgentName, codePersonnel: newAgentCode } 
               : agent
           ));
         } else {
@@ -161,6 +215,7 @@ const Admin = () => {
           const docRef = await addDoc(collection(db, 'agents'), {
             ip: newAgentIp,
             nom: newAgentName,
+            codePersonnel: newAgentCode,
             dateCreation: new Date().toISOString()
           });
           
@@ -168,7 +223,9 @@ const Admin = () => {
           setAgents([...agents, { 
             id: docRef.id, 
             ip: newAgentIp, 
-            nom: newAgentName 
+            nom: newAgentName,
+            codePersonnel: newAgentCode,
+            dateCreation: new Date().toISOString()
           }]);
         }
       }
@@ -176,6 +233,8 @@ const Admin = () => {
       // Réinitialiser le formulaire
       setNewAgentIp('');
       setNewAgentName('');
+      setNewAgentCode('');
+      setCodeError(null);
       setEditingAgent(null);
       setShowAgentModal(false);
     } catch (error) {
@@ -187,6 +246,8 @@ const Admin = () => {
     setEditingAgent(agent);
     setNewAgentIp(agent.ip);
     setNewAgentName(agent.nom);
+    setNewAgentCode(agent.codePersonnel || '');
+    setCodeError(null);
     setShowAgentModal(true);
   };
   
@@ -203,6 +264,16 @@ const Admin = () => {
       } catch (error) {
         console.error('Erreur lors de la suppression de l\'agent:', error);
       }
+    }
+  };
+
+  const handleGenerateCode = async () => {
+    try {
+      const newCode = await generateUniqueCode();
+      setNewAgentCode(newCode);
+      setCodeError(null);
+    } catch (error) {
+      console.error('Erreur lors de la génération du code:', error);
     }
   };
   
@@ -259,6 +330,8 @@ const Admin = () => {
                 setEditingAgent(null);
                 setNewAgentIp('');
                 setNewAgentName('');
+                setNewAgentCode('');
+                setCodeError(null);
                 setShowAgentModal(true);
               }}
               className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
@@ -277,6 +350,7 @@ const Admin = () => {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Nom de l'agent</th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Code personnel</th>
                     <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Adresse IP</th>
                     <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Actions</th>
                   </tr>
@@ -285,6 +359,7 @@ const Admin = () => {
                   {agents.map((agent, index) => (
                     <tr key={agent.id || index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                       <td className="py-3 px-4 text-sm text-gray-700">{agent.nom}</td>
+                      <td className="py-3 px-4 text-sm text-gray-700 font-mono">{agent.codePersonnel || '-'}</td>
                       <td className="py-3 px-4 text-sm text-gray-700">{agent.ip}</td>
                       <td className="py-3 px-4 text-sm">
                         <button 
@@ -339,6 +414,7 @@ const Admin = () => {
                     <th className="py-3 px-4 text-left text-sm font-semibold text-blue-800">Heure</th>
                     <th className="py-3 px-4 text-left text-sm font-semibold text-blue-800">Type</th>
                     <th className="py-3 px-4 text-left text-sm font-semibold text-blue-800">Agent</th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold text-blue-800">Code</th>
                     <th className="py-3 px-4 text-left text-sm font-semibold text-blue-800">IP</th>
                     <th className="py-3 px-4 text-left text-sm font-semibold text-blue-800">Adresse</th>
                   </tr>
@@ -371,7 +447,12 @@ const Admin = () => {
                             {record.type === 'entree' ? 'Entrée' : 'Sortie'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-700 font-medium">{getAgentName(record.ip)}</td>
+                        <td className="py-3 px-4 text-sm text-gray-700 font-medium">
+                          {record.nomAgent || getAgentName(record.ip, record.codePersonnel)}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-700 font-mono">
+                          {record.codePersonnel || '-'}
+                        </td>
                         <td className="py-3 px-4 text-sm text-gray-700">{record.ip}</td>
                         <td className="py-3 px-4 text-sm text-gray-700 truncate max-w-xs">
                           {record.address}
@@ -429,10 +510,10 @@ const Admin = () => {
       {/* Modal d'ajout/modification d'agent */}
       {showAgentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-semibold text-blue-700 mb-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-xl font-semibold text-blue-700 mb-4">
               {editingAgent ? 'Modifier un agent' : 'Ajouter un agent'}
-            </h2>
+            </h3>
             
             <div className="space-y-4">
               <div>
@@ -445,6 +526,7 @@ const Admin = () => {
                   value={newAgentName}
                   onChange={(e) => setNewAgentName(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Nom de l'agent"
                   required
                 />
               </div>
@@ -459,35 +541,70 @@ const Admin = () => {
                   value={newAgentIp}
                   onChange={(e) => setNewAgentIp(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="xxx.xxx.xxx.xxx"
                   required
                 />
               </div>
               
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAgentModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100"
-                >
-                  Annuler
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={handleAddAgent}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                >
-                  {editingAgent ? 'Mettre à jour' : 'Ajouter'}
-                </button>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label htmlFor="agentCode" className="block text-sm font-medium text-gray-700">
+                    Code personnel (4 chiffres)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateCode}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    Générer un code
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  id="agentCode"
+                  value={newAgentCode}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (/^\d{0,4}$/.test(value)) {
+                      setNewAgentCode(value);
+                      setCodeError(null);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-center font-mono text-lg tracking-widest"
+                  placeholder="0000"
+                  maxLength={4}
+                  required
+                />
+                {codeError && (
+                  <p className="mt-1 text-sm text-red-600">{codeError}</p>
+                )}
               </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowAgentModal(false);
+                  setEditingAgent(null);
+                  setNewAgentIp('');
+                  setNewAgentName('');
+                  setNewAgentCode('');
+                  setCodeError(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleAddAgent}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                {editingAgent ? 'Mettre à jour' : 'Ajouter'}
+              </button>
             </div>
           </div>
         </div>
       )}
-      
-      <div className="mt-6 text-center text-sm text-gray-500">
-        © {new Date().getFullYear()} - Ville de Noisy-le-Sec - Tous droits réservés
-      </div>
     </div>
   );
 };

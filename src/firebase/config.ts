@@ -2,15 +2,14 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
-// Configuration Firebase (à remplacer par vos propres identifiants)
+// Configuration Firebase (à remplacer par vos propres identifiants lors du déploiement)
 const firebaseConfig = {
-  apiKey: "AIzaSyAAcArWv37e499EyreInkP9CmMzZCWNtHc",
+  apiKey: "AIzaSyDummyKeyForDevelopment123456789",
   authDomain: "pointage-app-noisy.firebaseapp.com",
   projectId: "pointage-app-noisy",
-  storageBucket: "pointage-app-noisy.firebasestorage.app",
-  messagingSenderId: "187624415462",
-  appId: "1:187624415462:web:96848422f4bd63953e9b27",
-  measurementId: "G-SVF8EKENDQ"
+  storageBucket: "pointage-app-noisy.appspot.com",
+  messagingSenderId: "123456789012",
+  appId: "1:123456789012:web:abcdef1234567890"
 };
 
 // Initialisation de Firebase

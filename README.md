@@ -101,4 +101,3 @@ Pour toute question ou assistance, veuillez contacter le service informatique de
 ---
 
 © 2025 - Ville de Noisy-le-Sec - Tous droits réservés
-# pointage-app-firebase-source
