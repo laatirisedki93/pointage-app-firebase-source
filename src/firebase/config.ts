@@ -4,12 +4,13 @@ import { getAuth } from 'firebase/auth';
 
 // Configuration Firebase (à remplacer par vos propres identifiants)
 const firebaseConfig = {
-  apiKey: "AIzaSyDummyKeyForDevelopment123456789",
+  apiKey: "AIzaSyAAcArWv37e499EyreInkP9CmMzZCWNtHc",
   authDomain: "pointage-app-noisy.firebaseapp.com",
   projectId: "pointage-app-noisy",
-  storageBucket: "pointage-app-noisy.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef1234567890"
+  storageBucket: "pointage-app-noisy.firebasestorage.app",
+  messagingSenderId: "187624415462",
+  appId: "1:187624415462:web:96848422f4bd63953e9b27",
+  measurementId: "G-SVF8EKENDQ"
 };
 
 // Initialisation de Firebase
